@@ -70,6 +70,48 @@ CONFIG = {
     },
 }
 
+
+# Lima pilihan sensor umum untuk setiap variabel. Nilai noise dan resolusi
+# digunakan untuk simulasi edukasi, bukan klaim spesifikasi/kalibrasi resmi.
+SENSOR_OPTIONS = {
+    "Suhu": {
+        "DS18B20": (0.25, 0.0625, "Sensor suhu digital"),
+        "LM35": (0.40, 0.10, "Sensor suhu analog"),
+        "DHT22 / AM2302": (0.50, 0.10, "Sensor suhu dan kelembapan"),
+        "Termokopel tipe K + MAX6675": (0.75, 0.25, "Termokopel rentang suhu luas"),
+        "PT100 + MAX31865": (0.20, 0.10, "Sensor suhu RTD"),
+    },
+    "Tekanan": {
+        "BMP280": (80.0, 1.0, "Sensor tekanan barometrik"),
+        "BME280": (100.0, 1.0, "Sensor tekanan, suhu, dan kelembapan"),
+        "MPX5700": (1500.0, 100.0, "Sensor tekanan analog"),
+        "Transduser tekanan 0–1 bar (4–20 mA)": (1200.0, 100.0, "Transduser tekanan industri"),
+        "Transduser tekanan 0–10 bar": (2500.0, 500.0, "Transduser tekanan rentang lebih tinggi"),
+    },
+    "Arus listrik": {
+        "ACS712": (0.035, 0.01, "Sensor arus Hall-effect"),
+        "INA219": (0.008, 0.001, "Monitor arus dan tegangan DC"),
+        "INA226": (0.004, 0.001, "Monitor arus dan tegangan DC"),
+        "SCT-013": (0.05, 0.01, "Transformator arus AC"),
+        "ACS758": (0.045, 0.01, "Sensor arus Hall-effect rentang tinggi"),
+    },
+    "Tegangan listrik": {
+        "Pembagi tegangan (voltage divider)": (0.15, 0.01, "Pengukuran tegangan DC melalui pembagi"),
+        "INA219": (0.025, 0.01, "Monitor tegangan dan arus DC"),
+        "INA226": (0.015, 0.001, "Monitor tegangan dan arus DC"),
+        "ZMPT101B": (0.50, 0.10, "Modul sensor tegangan AC"),
+        "PZEM-004T": (0.35, 0.10, "Modul pengukuran listrik AC"),
+    },
+    "Daya listrik": {
+        "PZEM-004T": (2.0, 1.0, "Modul pengukuran daya listrik AC"),
+        "INA219": (0.5, 0.1, "Daya DC dihitung dari tegangan dan arus"),
+        "INA226": (0.3, 0.1, "Daya DC dihitung dari tegangan dan arus"),
+        "PZEM-016": (2.5, 1.0, "Meter listrik AC"),
+        "Modul ADE7753": (1.5, 0.1, "IC pengukuran energi dan daya"),
+    },
+}
+
+
 def convert(value, variable, target):
     source = CONFIG[variable]["source_unit"]
     if source == target:
@@ -88,17 +130,19 @@ def convert(value, variable, target):
         raise ValueError("Konversi satuan tidak tersedia.")
     return fn(value)
 
-def simulate_value(variable, sample_no):
+def simulate_value(variable, sample_no, sensor_name):
     cfg = CONFIG[variable]
+    noise_limit, resolution, _description = SENSOR_OPTIONS[variable][sensor_name]
     trend = (sample_no - 1) * cfg["variation"] * 0.08
-    noise = random.uniform(-cfg["variation"], cfg["variation"])
-    return max(cfg["min"], min(cfg["max"], cfg["base"] + trend + noise))
+    noise = random.uniform(-noise_limit, noise_limit)
+    value = max(cfg["min"], min(cfg["max"], cfg["base"] + trend + noise))
+    return round(round(value / resolution) * resolution, 6)
 
 st.title("📟 Smart Measurement System")
 st.caption("Dashboard simulasi pengukuran, konversi satuan, tabel, dan grafik.")
+st.caption("Dibuat oleh Althaaf Ar Rachman dan Muhammad Bima At-Taki.")
 st.warning(
-    "MODE SIMULASI: nilai yang ditampilkan dibuat oleh program, bukan berasal dari sensor fisik. "
-    "Ilustrasi di kartu hanya mewakili jenis pengukuran, bukan model sensor tertentu."
+    "MODE SIMULASI: nilai dibuat program, bukan berasal dari sensor fisik. Pilihan sensor mengubah noise dan resolusi simulasi; angka karakteristik hanya ilustrasi edukasi."
 )
 
 # Cards as visual selector
@@ -134,12 +178,16 @@ left, right = st.columns([1, 2], gap="large")
 with left:
     st.subheader("2. Pengaturan pengukuran")
     st.markdown(f"### {cfg['icon']} {variable}")
-    st.write(f"**Sensor:** {cfg['sensor']} (simulasi)")
+    sensor_name = st.selectbox("Pilih sensor", list(SENSOR_OPTIONS[variable].keys()), key=f"sensor_{variable}")
+    noise_limit, sensor_resolution, sensor_description = SENSOR_OPTIONS[variable][sensor_name]
+    st.caption(f"{sensor_description} · Noise simulasi ±{noise_limit} {cfg['source_unit']} · Resolusi simulasi {sensor_resolution} {cfg['source_unit']}")
     st.write(f"**Satuan sumber:** {cfg['source_unit']}")
     target_unit = st.selectbox("Satuan keluaran", cfg["units"], key=f"unit_{variable}")
     sample_count = st.number_input("Jumlah sampel", min_value=1, max_value=500, value=10, step=1)
-    interval = st.number_input("Interval antarsampel (detik)", min_value=0.1, max_value=3600.0, value=1.0, step=0.5)
-    duration = st.number_input("Durasi maksimum (detik)", min_value=0.1, max_value=3600.0, value=15.0, step=1.0)
+    interval_value = st.number_input("Interval antarsampel", min_value=0.1, max_value=1440.0, value=1.0, step=0.5)
+    interval_unit = st.selectbox("Satuan interval", ["Detik", "Menit"], key=f"interval_unit_{variable}")
+    interval_seconds = float(interval_value) * (60.0 if interval_unit == "Menit" else 1.0)
+    duration = st.number_input("Durasi maksimum (detik)", min_value=0.1, max_value=86400.0, value=15.0, step=1.0)
     realtime = st.checkbox("Jalankan sesuai waktu nyata (menunggu antar sampel)", value=False)
     run_button = st.button("▶ Mulai simulasi", type="primary", use_container_width=True)
     reset_button = st.button("↻ Reset hasil", use_container_width=True)
@@ -155,7 +203,7 @@ with right:
             <div style="font-size:23px;font-weight:750">{variable}</div>
             <div style="margin-top:6px">{cfg['description']}</div>
             <div style="margin-top:8px;font-size:13px;color:#5b6575">
-              Model sensor simulasi • Satuan sumber {cfg['source_unit']} • Keluaran {target_unit}
+              Sensor simulasi: {sensor_name} • Satuan sumber {cfg['source_unit']} • Keluaran {target_unit}
             </div>
           </div>
         </div>
@@ -179,22 +227,25 @@ if run_button:
     progress = st.progress(0, text="Menyiapkan simulasi...")
     status = st.empty()
     for i in range(1, int(sample_count) + 1):
-        scheduled_elapsed = (i - 1) * float(interval)
+        scheduled_elapsed = (i - 1) * interval_seconds
         if scheduled_elapsed > float(duration):
             break
         if realtime and i > 1:
-            time.sleep(float(interval))
+            time.sleep(interval_seconds)
         elapsed = time.monotonic() - start if realtime else scheduled_elapsed
         if elapsed > float(duration):
             break
 
-        raw = simulate_value(variable, i)
+        raw = simulate_value(variable, i, sensor_name)
         converted = convert(raw, variable, target_unit)
         records.append({
             "Nomor sampel": i,
             "Waktu (detik)": round(elapsed, 3),
+            "Waktu (menit)": round(elapsed / 60.0, 4),
             "Variabel": variable,
-            "Sensor": cfg["sensor"],
+            "Sensor": sensor_name,
+            "Noise simulasi": noise_limit,
+            "Resolusi simulasi": sensor_resolution,
             "Nilai asli": raw,
             "Satuan asli": cfg["source_unit"],
             "Nilai konversi": converted,
@@ -207,6 +258,7 @@ if run_button:
     st.session_state.records = records
     st.session_state.last_variable = variable
     st.session_state.last_unit = target_unit
+    st.session_state.last_sensor = sensor_name
     st.success(f"Simulasi selesai. Data valid terkumpul: {len(records)} dari target {int(sample_count)}.")
 
 records = st.session_state.get("records", [])
@@ -248,3 +300,13 @@ else:
     st.markdown("---")
     st.subheader("4. Hasil pengukuran")
     st.write("Belum ada data. Pilih variabel, atur parameter, lalu tekan **Mulai simulasi**.")
+
+
+st.markdown("---")
+st.markdown(
+    """<div style="text-align:center;padding:8px 0;color:#64748b;">
+    <div>Smart Measurement System</div>
+    <div style="font-weight:600;">Dibuat oleh Althaaf Ar Rachman dan Muhammad Bima At-Taki</div>
+    </div>""",
+    unsafe_allow_html=True,
+)
