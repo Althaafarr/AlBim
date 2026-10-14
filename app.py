@@ -187,7 +187,9 @@ with left:
     interval_value = st.number_input("Interval antarsampel", min_value=0.1, max_value=1440.0, value=1.0, step=0.5)
     interval_unit = st.selectbox("Satuan interval", ["Detik", "Menit"], key=f"interval_unit_{variable}")
     interval_seconds = float(interval_value) * (60.0 if interval_unit == "Menit" else 1.0)
-    duration = st.number_input("Durasi maksimum (detik)", min_value=0.1, max_value=86400.0, value=15.0, step=1.0)
+    duration_value = st.number_input("Durasi maksimum", min_value=0.1, max_value=1440.0, value=15.0, step=1.0)
+    duration_unit = st.selectbox("Satuan durasi maksimum", ["Detik", "Menit"], key=f"duration_unit_{variable}")
+    duration_seconds = float(duration_value) * (60.0 if duration_unit == "Menit" else 1.0)
     realtime = st.checkbox("Jalankan sesuai waktu nyata (menunggu antar sampel)", value=False)
     run_button = st.button("▶ Mulai simulasi", type="primary", use_container_width=True)
     reset_button = st.button("↻ Reset hasil", use_container_width=True)
@@ -228,12 +230,12 @@ if run_button:
     status = st.empty()
     for i in range(1, int(sample_count) + 1):
         scheduled_elapsed = (i - 1) * interval_seconds
-        if scheduled_elapsed > float(duration):
+        if scheduled_elapsed > duration_seconds:
             break
         if realtime and i > 1:
             time.sleep(interval_seconds)
         elapsed = time.monotonic() - start if realtime else scheduled_elapsed
-        if elapsed > float(duration):
+        if elapsed > duration_seconds:
             break
 
         raw = simulate_value(variable, i, sensor_name)
